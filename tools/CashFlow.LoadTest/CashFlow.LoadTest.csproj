@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Open-loop load generator used to verify the "50 requests per second at peak" requirement.
+    Dependency-free on purpose: the reviewer can reproduce the numbers with `dotnet run`,
+    without installing k6, wrk or any other tool.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>CashFlow.LoadTest</RootNamespace>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+</Project>

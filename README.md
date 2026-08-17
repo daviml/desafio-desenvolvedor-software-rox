@@ -296,12 +296,23 @@ Motivos: sem dependência com restrição de licença comercial, a reflexão oco
 (depois é chamada virtual em cache), e o pipeline que envolve todo caso de uso é legível em um
 único arquivo — nada de *assembly scanning* mágico.
 
-### 6. Concorrência otimista na projeção
+### 6. Concorrência otimista na projeção — e por que o retry mora ali
 
 Vários consumidores podem tocar o mesmo dia simultaneamente. `DailyBalance.Version` é um
 *concurrency token*: o EF adiciona o valor original ao `WHERE` do `UPDATE`, e quem perde a corrida
-recebe `ConcurrencyConflictException` — o que faz a mensagem ser reprocessada com estado fresco em
-vez de sobrescrever silenciosamente um saldo.
+recebe `ConcurrencyConflictException`, sendo **reprocessado com estado fresco** por
+[`RetryingDailyBalanceProjection`](src/Consolidation/CashFlow.Consolidation.Application/Projection/RetryingDailyBalanceProjection.cs)
+— cada tentativa em um escopo de DI novo, porque um `SaveChanges` que falhou deixa a unidade de
+trabalho anterior com estado sujo.
+
+O retry fica na **projeção**, não no consumidor do RabbitMQ, porque o conflito é uma propriedade do
+caso de uso: assim a garantia vale para qualquer transporte, inclusive replay e reprocessamento.
+
+Um detalhe sutil e crítico: a violação de unicidade em `processed_events` (replay legítimo, pode
+ser ignorado) e em `daily_balances` (dois consumidores abrindo o mesmo dia, **precisa** de retry)
+precisam ser distinguidas. Tratar as duas como "evento duplicado" faz o valor sumir do saldo
+silenciosamente — cenário que ocorreu ao validar a solução com o broker real e está coberto por
+teste de regressão desde então.
 
 ### 7. Modelagem de dinheiro
 
@@ -381,15 +392,15 @@ latência — em vez de aceitar tudo e colapsar.
 dotnet test
 ```
 
-**111 testes**, sem necessidade de Docker, banco ou broker:
+**115 testes**, sem necessidade de Docker, banco ou broker:
 
 | Projeto | Testes | Escopo |
 |---|---|---|
 | `CashFlow.SharedKernel.UnitTests` | 23 | `Money`, `Result`, decorator de validação |
 | `CashFlow.Launches.UnitTests` | 38 | Invariantes do agregado `Entry`, handlers, validators, mapeamento de contratos |
-| `CashFlow.Consolidation.UnitTests` | 26 | Aritmética do `DailyBalance`, projetor, queries de relatório |
+| `CashFlow.Consolidation.UnitTests` | 29 | Aritmética do `DailyBalance`, projetor, retry sob concorrência, queries |
 | `CashFlow.Launches.IntegrationTests` | 15 | API real ponta a ponta + **comportamento do outbox sob falha do broker** |
-| `CashFlow.Consolidation.IntegrationTests` | 9 | Consumo de eventos, deduplicação, compensação, endpoints de relatório |
+| `CashFlow.Consolidation.IntegrationTests` | 10 | Consumo de eventos, deduplicação, concorrência, compensação, relatórios |
 
 Os testes de integração sobem a aplicação real (`WebApplicationFactory`) — mesmo container de DI,
 mesmo pipeline de middlewares, mesmo modelo do EF Core — contra SQLite em memória. O que é
@@ -400,7 +411,13 @@ Destaque para os cenários que provam os requisitos não funcionais:
 - `Sweep_WhenTheBrokerIsDown_KeepsTheMessagePendingAndSchedulesARetry`
 - `Sweep_WhenTheBrokerRecovers_PublishesThePendingMessageExactlyOnce`
 - `TheSameEventDeliveredTwice_IsAppliedOnlyOnce`
+- `ConcurrentEventsForTheSameDay_AreAllAccountedFor`
+- `ApplyAsync_WhenTheRaceNeverResolves_SurfacesTheFailureSoTheMessageIsNotLost`
 - `Post_Entry_WithTheSameIdempotencyKey_ReturnsTheOriginalEntry`
+
+Além da suíte automatizada, a solução foi validada contra o stack real em contêineres. O cenário
+mais severo — parar o broker, registrar 12 lançamentos e restabelecê-lo, fazendo o outbox drenar
+os 12 eventos de uma só vez — resulta em `balance: 1200.00`, `entryCount: 12` e DLQ vazia.
 
 ---
 

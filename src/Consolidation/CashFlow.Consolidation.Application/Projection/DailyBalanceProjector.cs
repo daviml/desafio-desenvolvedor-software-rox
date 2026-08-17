@@ -12,12 +12,17 @@ namespace CashFlow.Consolidation.Application.Projection;
 /// The one place where an entry event becomes a change to the consolidated daily balance.
 /// Both event handlers delegate here, so the "apply once, atomically" rule exists only once.
 /// </summary>
+/// <remarks>
+/// A lost write race surfaces as <see cref="ConcurrencyConflictException"/> and is deliberately
+/// <em>not</em> handled here: retrying needs a clean unit of work, which only the caller can
+/// provide. <see cref="RetryingDailyBalanceProjection"/> is that caller in production.
+/// </remarks>
 public sealed class DailyBalanceProjector(
     IDailyBalanceRepository dailyBalances,
     IProcessedEventStore processedEvents,
     IUnitOfWork unitOfWork,
     IClock clock,
-    ILogger<DailyBalanceProjector> logger)
+    ILogger<DailyBalanceProjector> logger) : IDailyBalanceProjection
 {
     public Task ApplyAsync(EntryRegisteredIntegrationEvent integrationEvent, CancellationToken cancellationToken)
     {

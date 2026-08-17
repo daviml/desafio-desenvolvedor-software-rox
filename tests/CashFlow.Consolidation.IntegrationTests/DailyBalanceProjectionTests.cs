@@ -111,6 +111,29 @@ public sealed class DailyBalanceProjectionTests(ConsolidationApiFactory factory)
     }
 
     [Fact]
+    public async Task ConcurrentEventsForTheSameDay_AreAllAccountedFor()
+    {
+        // Regression: a burst of events for the same merchant and day - exactly what happens when
+        // a backlogged outbox drains after a broker outage - used to lose every event but the
+        // first, because the racing consumers collided on creating the day row.
+        var merchantId = Guid.NewGuid();
+        var day = new DateOnly(2026, 6, 1);
+
+        var events = Enumerable
+            .Range(0, 10)
+            .Select(_ => Registered(merchantId, EntryType.Credit, 100m, day))
+            .ToList();
+
+        await Task.WhenAll(events.Select(factory.DispatchAsync));
+
+        var balance = await GetDailyBalanceAsync(merchantId, day);
+
+        balance!.TotalCredits.ShouldBe(1_000m);
+        balance.CreditCount.ShouldBe(10);
+        balance.Balance.ShouldBe(1_000m);
+    }
+
+    [Fact]
     public async Task DaysAreConsolidatedIndependently()
     {
         var merchantId = Guid.NewGuid();

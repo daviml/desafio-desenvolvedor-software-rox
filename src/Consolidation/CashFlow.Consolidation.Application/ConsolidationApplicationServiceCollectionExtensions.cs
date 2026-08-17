@@ -23,7 +23,10 @@ public static class ConsolidationApplicationServiceCollectionExtensions
         services.AddScoped<IValidator<GetDailyBalanceQuery>, GetDailyBalanceQueryValidator>();
         services.AddScoped<IValidator<GetStatementQuery>, GetStatementQueryValidator>();
 
+        // The projector is the use case; the decorator adds the retry that a lost write race needs.
+        // Singleton because it owns no state and opens a fresh scope per attempt.
         services.AddScoped<DailyBalanceProjector>();
+        services.AddSingleton<IDailyBalanceProjection, RetryingDailyBalanceProjection>();
         services.AddScoped<IIntegrationEventHandler<EntryRegisteredIntegrationEvent>,
             EntryRegisteredIntegrationEventHandler>();
         services.AddScoped<IIntegrationEventHandler<EntryCancelledIntegrationEvent>,
