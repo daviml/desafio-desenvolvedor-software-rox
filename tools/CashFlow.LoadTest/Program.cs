@@ -55,7 +55,7 @@ while (run.Elapsed < TimeSpan.FromSeconds(options.DurationSeconds))
     {
         try
         {
-            results.Add(await SendAsync(client, url));
+            results.Add(await SendAsync(client, url, options.PostBodyTemplate));
         }
         finally
         {
@@ -82,20 +82,23 @@ static async Task WarmUpAsync(HttpClient client, LoadTestOptions options)
 
     while (warmup.Elapsed < TimeSpan.FromSeconds(options.WarmupSeconds))
     {
-        await SendAsync(client, options.Urls[index++ % options.Urls.Length]);
+        await SendAsync(client, options.Urls[index++ % options.Urls.Length], options.PostBodyTemplate);
     }
 
     Console.WriteLine("Warm-up done.");
     Console.WriteLine();
 }
 
-static async Task<RequestOutcome> SendAsync(HttpClient client, Uri url)
+static async Task<RequestOutcome> SendAsync(HttpClient client, Uri url, string? postBodyTemplate)
 {
     var timestamp = Stopwatch.GetTimestamp();
 
     try
     {
-        using var response = await client.GetAsync(url, HttpCompletionOption.ResponseContentRead);
+        using var response = postBodyTemplate is null
+            ? await client.GetAsync(url, HttpCompletionOption.ResponseContentRead)
+            : await client.PostAsync(url, BuildBody(postBodyTemplate));
+
         var elapsed = Stopwatch.GetElapsedTime(timestamp).TotalMilliseconds;
 
         return new RequestOutcome(response.StatusCode, elapsed, Faulted: false);
@@ -107,16 +110,27 @@ static async Task<RequestOutcome> SendAsync(HttpClient client, Uri url)
     }
 }
 
+/// <summary>Replaces every "{guid}" placeholder so each request writes a distinct record.</summary>
+static StringContent BuildBody(string template) =>
+    new(template.Replace("{guid}", Guid.NewGuid().ToString(), StringComparison.Ordinal),
+        System.Text.Encoding.UTF8,
+        "application/json");
+
 namespace CashFlow.LoadTest
 {
     internal readonly record struct RequestOutcome(HttpStatusCode? StatusCode, double ElapsedMs, bool Faulted)
     {
-        public bool IsSuccess => !Faulted && StatusCode is HttpStatusCode.OK;
+        public bool IsSuccess => !Faulted && StatusCode is HttpStatusCode.OK or HttpStatusCode.Created;
 
         public bool IsShedLoad => StatusCode is HttpStatusCode.TooManyRequests;
     }
 
-    internal sealed record LoadTestOptions(Uri[] Urls, int TargetRps, int DurationSeconds, int WarmupSeconds)
+    internal sealed record LoadTestOptions(
+        Uri[] Urls,
+        int TargetRps,
+        int DurationSeconds,
+        int WarmupSeconds,
+        string? PostBodyTemplate)
     {
         /// <summary>Bounds client-side concurrency so the generator itself cannot exhaust sockets.</summary>
         public int MaxInFlight => Math.Max(64, TargetRps * 4);
@@ -134,18 +148,22 @@ namespace CashFlow.LoadTest
                 : url is not null
                     ? [new Uri(url)]
                     : throw new ArgumentException(
-                        "Usage: dotnet run -- (--url <url> | --urls-file <path>) [--rps 100] [--duration 60] [--warmup 5]");
+                        "Usage: dotnet run -- (--url <url> | --urls-file <path>) "
+                        + "[--rps 100] [--duration 60] [--warmup 5] [--post-body-file <path>]");
 
             if (urls.Length == 0)
             {
                 throw new ArgumentException("The URL file is empty.");
             }
 
+            var postBodyFile = Get(args, "--post-body-file");
+
             return new LoadTestOptions(
                 urls,
                 int.Parse(Get(args, "--rps") ?? "100", CultureInfo.InvariantCulture),
                 int.Parse(Get(args, "--duration") ?? "60", CultureInfo.InvariantCulture),
-                int.Parse(Get(args, "--warmup") ?? "5", CultureInfo.InvariantCulture));
+                int.Parse(Get(args, "--warmup") ?? "5", CultureInfo.InvariantCulture),
+                postBodyFile is null ? null : File.ReadAllText(postBodyFile));
         }
 
         private static string? Get(string[] args, string name)
@@ -175,7 +193,7 @@ namespace CashFlow.LoadTest
             Console.WriteLine("─────────────────────────────────────────────");
             Console.WriteLine($"Requests issued    : {outcomes.Length}");
             Console.WriteLine($"Achieved rate      : {outcomes.Length / elapsed.TotalSeconds:0.0} req/s");
-            Console.WriteLine($"Successful (200)   : {successes.Length} ({Percent(successes.Length, outcomes.Length):0.00}%)");
+            Console.WriteLine($"Successful (2xx)   : {successes.Length} ({Percent(successes.Length, outcomes.Length):0.00}%)");
             Console.WriteLine($"Shed (429)         : {shed} ({Percent(shed, outcomes.Length):0.00}%)");
             Console.WriteLine($"Other status codes : {otherErrors}");
             Console.WriteLine($"Faulted / timeout  : {faulted}");

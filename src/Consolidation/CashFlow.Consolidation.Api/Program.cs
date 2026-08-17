@@ -61,12 +61,18 @@ builder.Services.AddRateLimiter(options =>
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
         RateLimitPartition.GetTokenBucketLimiter(
             httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            // 200 req/s sustained (4x the stated peak) with room for a 100-request burst.
+            // Replenishing every 100 ms instead of once per second matters more than it looks:
+            // a one-second period hands out the whole allowance at the tick and then starves
+            // everything until the next one, so admitted requests sat ~1s in the queue. Small,
+            // frequent refills plus a short queue keep admitted requests fast and reject the
+            // rest immediately - shedding load is only useful if it is *fast*.
             _ => new TokenBucketRateLimiterOptions
             {
-                TokenLimit = 400,
-                TokensPerPeriod = 200,
-                ReplenishmentPeriod = TimeSpan.FromSeconds(1),
-                QueueLimit = 200,
+                TokenLimit = 100,
+                TokensPerPeriod = 20,
+                ReplenishmentPeriod = TimeSpan.FromMilliseconds(100),
+                QueueLimit = 20,
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
                 AutoReplenishment = true,
             }));

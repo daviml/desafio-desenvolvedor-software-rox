@@ -25,7 +25,7 @@ consolidação (ou o broker) fora do ar** — requisito não funcional central d
 - [Endpoints](#endpoints)
 - [Arquitetura](#arquitetura)
 - [Decisões técnicas](#decisões-técnicas)
-- [Requisitos não funcionais](#requisitos-não-funcionais)
+- [Requisitos não funcionais](#requisitos-não-funcionais) — [medição de desempenho](docs/desempenho.md)
 - [Testes](#testes)
 - [Estrutura do repositório](#estrutura-do-repositório)
 - [Melhorias futuras](#melhorias-futuras)
@@ -384,6 +384,34 @@ A tolerância a 5% de perda é atendida por **degradação graciosa**: sob sobre
 rápido uma fatia das requisições (com `Retry-After`) para manter as demais dentro do orçamento de
 latência — em vez de aceitar tudo e colapsar.
 
+#### Medição
+
+O requisito foi **medido**, não apenas argumentado. Resultados completos em
+**[docs/desempenho.md](docs/desempenho.md)**:
+
+| Cenário | Taxa | Perda | p99 |
+|---|---|---|---|
+| `GET /daily-balance` — **o requisito** | 50 req/s | **0,00%** (orçamento: 5%) | **3,75 ms** |
+| `GET /daily-balance` — 3× o requisito | 150 req/s | 0,00% | 3,31 ms |
+| `GET /statement` (janela de 30 dias) | 50 req/s | 0,00% | 3,97 ms |
+| `POST /entries` (escrita) | 50 req/s | 0,00% | 5,50 ms |
+| Sobrecarga deliberada | 600 req/s | 66% descartados com `429` | 105 ms nos atendidos |
+
+A carga rotaciona entre 200 lojistas distintos, para medir o caminho do banco e não o cache. Ao fim
+da carga de escrita o outbox já estava vazio — o dispatcher acompanhou a ingestão em tempo real.
+
+O teste de sobrecarga rendeu uma correção concreta: o `TokenBucketRateLimiter` repunha a cota uma
+vez por segundo, e as requisições **admitidas** esperavam ~1s na fila. Repondo a cada 100 ms e
+encurtando a fila, o p50 sob sobrecarga caiu de **985 ms para 86 ms**.
+
+Para reproduzir:
+
+```bash
+docker compose up -d
+cd tools/CashFlow.LoadTest
+dotnet run -c Release -- --urls-file urls.txt --rps 50 --duration 60
+```
+
 ---
 
 ## Testes
@@ -440,8 +468,10 @@ src/
 │  ├─ CashFlow.Consolidation.Application/     # Projetor, handlers de evento, queries
 │  ├─ CashFlow.Consolidation.Infrastructure/  # EF Core, dedup, migrations
 │  └─ CashFlow.Consolidation.Api/             # Minimal APIs, output cache
-tests/                                        # 5 projetos, 111 testes
+tests/                                        # 5 projetos, 115 testes
+tools/CashFlow.LoadTest/                      # Gerador de carga open-loop, sem dependências
 docs/arquitetura.md                           # Diagramas e detalhamento
+docs/desempenho.md                            # Medição do requisito de 50 req/s
 scripts/smoke-test.sh                         # Roteiro de demonstração ponta a ponta
 docker-compose.yml                            # PostgreSQL + RabbitMQ + as duas APIs
 ```
@@ -477,9 +507,10 @@ O que ficou fora do escopo desta entrega, e por quê:
    projeção a partir do zero. A projeção já é derivável, mas falta a ferramenta operacional.
 5. **Fechamento contábil** — hoje o lançamento retroativo é limitado a 365 dias por invariante.
    Um sistema real teria períodos formalmente fechados, com lançamentos de ajuste.
-6. **Testes de carga** — validar empiricamente os 50 req/s com k6/NBomber, incluindo teste de caos
-   (derrubar o broker sob carga). A arquitetura foi dimensionada para isso, mas o número ainda não
-   foi medido em ambiente controlado.
+6. **Testes de carga em ambiente dedicado** — os números de [desempenho](docs/desempenho.md) foram
+   medidos em máquina de desenvolvimento, com o gerador disputando CPU com os serviços. Faltam
+   execuções em nós dedicados, com múltiplas réplicas, e teste de caos derrubando o broker
+   *durante* a carga.
 7. **Particionamento de `daily_balances`** por faixa de data, quando o volume justificar.
 8. **Versionamento de contratos** — os eventos já têm nome de wire estável e desacoplado do tipo
    CLR; falta publicá-los como pacote NuGet versionado independentemente.
