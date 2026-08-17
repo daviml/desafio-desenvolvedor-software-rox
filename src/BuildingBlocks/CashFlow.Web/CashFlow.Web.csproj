@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Cross-cutting HTTP concerns shared by both APIs: Result -> ProblemDetails mapping,
+    correlation ids, the global exception handler and health endpoints.
+    Written once so the two services cannot drift apart in how they report failures.
+  -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CashFlow.SharedKernel\CashFlow.SharedKernel.csproj" />
+  </ItemGroup>
+
+</Project>

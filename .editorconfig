@@ -1,0 +1,58 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+indent_style = space
+indent_size = 4
+trim_trailing_whitespace = true
+
+[*.{json,yml,yaml,md,csproj,props,targets,sln}]
+indent_size = 2
+
+[*.cs]
+# Usings
+dotnet_sort_system_directives_first = true
+csharp_using_directive_placement = outside_namespace:warning
+
+# Language conventions
+csharp_style_namespace_declarations = file_scoped:warning
+csharp_style_var_when_type_is_apparent = true:suggestion
+csharp_style_expression_bodied_methods = when_on_single_line:suggestion
+csharp_style_prefer_primary_constructors = true:suggestion
+csharp_prefer_braces = true:suggestion
+dotnet_style_readonly_field = true:warning
+dotnet_style_require_accessibility_modifiers = for_non_interface_members:warning
+dotnet_style_coalesce_expression = true:suggestion
+dotnet_style_null_propagation = true:suggestion
+
+# Naming: private fields are _camelCase
+dotnet_naming_rule.private_fields_underscore.symbols = private_fields
+dotnet_naming_rule.private_fields_underscore.style = underscore_camel
+dotnet_naming_rule.private_fields_underscore.severity = warning
+dotnet_naming_symbols.private_fields.applicable_kinds = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private
+dotnet_naming_style.underscore_camel.required_prefix = _
+dotnet_naming_style.underscore_camel.capitalization = camel_case
+
+# Analyzer noise that does not add value for this codebase
+dotnet_diagnostic.CA1848.severity = none  # LoggerMessage delegates
+dotnet_diagnostic.CA2007.severity = none  # ConfigureAwait in ASP.NET Core
+dotnet_diagnostic.CA1062.severity = none  # null checks on public args (nullable ref types cover it)
+dotnet_diagnostic.CA1515.severity = none  # internal-by-default for app assemblies
+# The rules below protect *public API libraries* consumed by other languages. These assemblies are
+# application building blocks (Result<T>.Success, Error, PagedResult<T>.Empty are idiomatic in C#).
+dotnet_diagnostic.CA1000.severity = none  # static members on generic types
+dotnet_diagnostic.CA1716.severity = none  # identifiers matching keywords in other languages
+dotnet_diagnostic.CA1711.severity = none  # "...EventHandler" is the intended ubiquitous language here
+# Boxing a value type into a log call trips this rule. Hot paths use source-generated LoggerMessage
+# (see LoggingDecorator); elsewhere the cost is irrelevant and IsEnabled guards would only add noise.
+dotnet_diagnostic.CA1873.severity = suggestion
+
+# EF Core scaffolds these files; they are generated artefacts, not hand-written code.
+[**/Persistence/Migrations/*.cs]
+generated_code = true
+dotnet_analyzer_diagnostic.severity = none
+dotnet_diagnostic.IDE0161.severity = none
+dotnet_diagnostic.CA1861.severity = none

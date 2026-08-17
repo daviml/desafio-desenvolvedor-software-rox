@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" />
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="Polly.Core" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The outbox dispatcher is an internal detail; the integration suite drives it directly. -->
+    <InternalsVisibleTo Include="CashFlow.Launches.IntegrationTests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\BuildingBlocks\CashFlow.Messaging.RabbitMq\CashFlow.Messaging.RabbitMq.csproj" />
+    <ProjectReference Include="..\CashFlow.Launches.Application\CashFlow.Launches.Application.csproj" />
+  </ItemGroup>
+
+</Project>

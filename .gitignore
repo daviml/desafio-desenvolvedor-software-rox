@@ -1,0 +1,33 @@
+## Build output
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+[Ll]og/
+[Ll]ogs/
+artifacts/
+publish/
+TestResults/
+*.trx
+*.coverage
+*.coverlet.json
+coverage*.xml
+coverage*.json
+
+## IDE / tooling
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.claude/settings.local.json
+
+## OS
+.DS_Store
+Thumbs.db
+
+## Local secrets and overrides
+appsettings.Local.json
+*.local.env
+.env

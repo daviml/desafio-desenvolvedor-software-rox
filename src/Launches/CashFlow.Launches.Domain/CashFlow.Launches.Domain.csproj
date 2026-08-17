@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Domain layer: entities, value objects and invariants. No external dependencies by design. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\BuildingBlocks\CashFlow.SharedKernel\CashFlow.SharedKernel.csproj" />
+  </ItemGroup>
+
+</Project>

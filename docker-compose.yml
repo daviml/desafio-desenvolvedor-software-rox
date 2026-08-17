@@ -1,0 +1,100 @@
+name: cashflow
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: cashflow-postgres
+    environment:
+      POSTGRES_USER: cashflow
+      POSTGRES_PASSWORD: cashflow
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres/init-databases.sql:/docker-entrypoint-initdb.d/init-databases.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cashflow -d postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    container_name: cashflow-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: cashflow
+      RABBITMQ_DEFAULT_PASS: cashflow
+    ports:
+      - "5672:5672"    # AMQP
+      - "15672:15672"  # Management UI - http://localhost:15672 (cashflow / cashflow)
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_running"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  launches-api:
+    build:
+      context: .
+      dockerfile: src/Launches/CashFlow.Launches.Api/Dockerfile
+    container_name: cashflow-launches-api
+    ports:
+      - "8081:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      Database__Provider: Postgres
+      Database__ConnectionString: "Host=postgres;Port=5432;Database=cashflow_launches;Username=cashflow;Password=cashflow"
+      Messaging__Provider: RabbitMq
+      Messaging__RabbitMq__HostName: rabbitmq
+      Messaging__RabbitMq__UserName: cashflow
+      Messaging__RabbitMq__Password: cashflow
+    depends_on:
+      postgres:
+        condition: service_healthy
+      # The broker only has to be reachable eventually: entries are accepted regardless, and the
+      # outbox drains once RabbitMQ answers. Waiting here simply avoids noisy start-up retries.
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://localhost:8080/health/live || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
+  consolidation-api:
+    build:
+      context: .
+      dockerfile: src/Consolidation/CashFlow.Consolidation.Api/Dockerfile
+    container_name: cashflow-consolidation-api
+    ports:
+      - "8082:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      Database__Provider: Postgres
+      Database__ConnectionString: "Host=postgres;Port=5432;Database=cashflow_consolidation;Username=cashflow;Password=cashflow"
+      Messaging__Provider: RabbitMq
+      Messaging__RabbitMq__HostName: rabbitmq
+      Messaging__RabbitMq__UserName: cashflow
+      Messaging__RabbitMq__Password: cashflow
+      Messaging__RabbitMq__QueueName: cashflow.consolidation
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://localhost:8080/health/live || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  rabbitmq-data:

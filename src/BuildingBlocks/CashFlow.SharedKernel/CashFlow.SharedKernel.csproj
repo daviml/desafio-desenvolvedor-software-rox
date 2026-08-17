@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Shared Kernel: building blocks reused by both bounded contexts
+    (domain primitives, Result type, in-process mediator and its decorators).
+    Only abstraction packages are referenced - no database, broker or web dependency.
+  -->
+  <ItemGroup>
+    <PackageReference Include="FluentValidation" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+
+</Project>
