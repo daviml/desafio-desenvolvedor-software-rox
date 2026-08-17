@@ -22,12 +22,23 @@ RUN dotnet publish src/Launches/CashFlow.Launches.Api/CashFlow.Launches.Api.cspr
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
 
+# The runtime image ships with no HTTP client at all, so a container healthcheck has nothing to
+# call with. Installing curl is what makes the probe below real instead of always failing.
+USER root
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
 ENV ASPNETCORE_HTTP_PORTS=8080 \
     DOTNET_gcServer=1
 
 # Runs as the image's non-root "app" user: nothing here needs elevated privileges.
 USER app
 EXPOSE 8080
+
+# Liveness only: a broker outage must not make the orchestrator restart a healthy process.
+HEALTHCHECK --interval=10s --timeout=5s --start-period=20s --retries=5 \
+    CMD curl -fsS http://localhost:8080/health/live || exit 1
 
 COPY --from=build /app/publish .
 

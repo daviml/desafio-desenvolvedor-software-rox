@@ -58,12 +58,8 @@ services:
       # outbox drains once RabbitMQ answers. Waiting here simply avoids noisy start-up retries.
       rabbitmq:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q -O- http://localhost:8080/health/live || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 20s
+    # The healthcheck lives in the image (see the Dockerfile), so it applies just the same to
+    # anyone running the container outside Compose.
     restart: unless-stopped
 
   consolidation-api:
@@ -87,12 +83,7 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q -O- http://localhost:8080/health/live || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 20s
+    # The healthcheck lives in the image (see the Dockerfile).
     restart: unless-stopped
 
 volumes:
